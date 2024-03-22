@@ -144,7 +144,7 @@ symbols_to_check = ['EURUSD', 'AUDUSD', 'EURCAD', 'AUDCAD', 'NZDCAD', 'NZDUSD']
 current_prices = get_current_market_prices(symbols_to_check)
 within_special_zone(current_prices, special_zones, df)
 
-print(df)
+# print(df)
 
 # 8- TRADING STRATEGY
 
