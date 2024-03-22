@@ -165,16 +165,16 @@ def trading_strategy(candle, special_zones):
 
     # special condition - engulfing candle body is 1.5 times as long as previous candle range
     if candle['previous_high'] - candle['previous_low'] == 0:
-        return False
+        return np.nan
 
     special_cond = abs(candle['open'] - candle['close']) / (candle['previous_high'] - candle['previous_low']) >= 1.5
 
     if bull_cond1 and bull_cond2 and bull_cond3 and special_cond and candle['SpecialZone'] == 'Within special zone':
-        return 'buy'
+        return 'Buy'
     elif bear_cond1 and bear_cond2 and bear_cond3 and special_cond and candle['SpecialZone'] == 'Within special zone':
-        return 'sell'
+        return 'Sell'
     else:
-        return False
+        return np.nan
 
 # Example usage:
 
@@ -182,8 +182,8 @@ def trading_strategy(candle, special_zones):
 df['TradeSignal'] = df.apply(trading_strategy, special_zones=special_zones, axis=1)
 
 # Filter rows with trade signals
-buy_signals = df[df['TradeSignal'] == 'buy']
-sell_signals = df[df['TradeSignal'] == 'sell']
+buy_signals = df[df['TradeSignal'] == 'Buy']
+sell_signals = df[df['TradeSignal'] == 'Sell']
 
 print(df)
 
@@ -193,3 +193,148 @@ print(buy_signals[['symbol', 'TradeSignal']])
 print("\nSell Signals:")
 print(sell_signals[['symbol', 'TradeSignal']])
 
+
+
+#10 .  PLACING TRADES.
+
+
+if not mt5.initialize():
+    print("initialize() failed, error code =", mt5.last_error())
+    quit()
+
+# Separate the DataFrame into two parts based on time
+current_time = df.index[-1]  
+past_df = df[df.index < current_time]
+current_df = df[df.index >= current_time]
+
+# For the past part, print 'No trade' for all symbols
+for symbol in desired_symbols:
+    print(f"No trade for {symbol}")
+
+# For the current part, place trades
+for index, row in current_df.iterrows():
+    symbol = row['symbol']
+    trade_signal = row['TradeSignal']
+
+    if pd.isna(trade_signal):
+        print(f"No trade for {symbol}")
+
+        ##   FOR SELL
+    
+    elif trade_signal == 'Sell':
+        print(f"Sell {symbol}")
+        
+
+        symbol_info = mt5.symbol_info(symbol)
+        if symbol_info is None:
+            print(symbol, "not found, can not call order_check()")
+            continue
+
+        if not symbol_info.visible:
+            print(symbol, "is not visible, trying to switch on")
+            if not mt5.symbol_select(symbol, True):
+                print("symbol_select({}) failed, exit".format(symbol))
+                continue
+
+        lot = 0.1
+        point = mt5.symbol_info(symbol).point
+        price = mt5.symbol_info_tick(symbol).bid
+        deviation = 20
+        request = {
+            "action": mt5.TRADE_ACTION_DEAL,
+            "symbol": symbol,
+            "volume": lot,
+            "type": mt5.ORDER_TYPE_SELL,
+            "price": price,
+            "sl": price + 100 * point,
+            "tp": price - 200 * point,
+            "deviation": deviation,
+            "magic": 234000,
+            "comment": "python script open",
+            "type_time": mt5.ORDER_TIME_GTC,
+            "type_filling": mt5.ORDER_FILLING_FOK,
+        }
+
+        
+        result = mt5.order_send(request)
+        
+        print("1. order_send(): by {} {} lots at {} with deviation={} points".format(symbol, lot, price, deviation))
+        if result.retcode != mt5.TRADE_RETCODE_DONE:
+            print("2. order_send failed, retcode={}".format(result.retcode))
+            
+            result_dict = result._asdict()
+            for field in result_dict.keys():
+                print("   {}={}".format(field, result_dict[field]))
+                
+                if field == "request":
+                    traderequest_dict = result_dict[field]._asdict()
+                    for tradereq_filed in traderequest_dict:
+                        print("       traderequest: {}={}".format(tradereq_filed, traderequest_dict[tradereq_filed]))
+            print("shutdown() and quit")
+            mt5.shutdown()
+            quit()
+
+        print("2. order_send done, ", result)
+        print("   opened position with POSITION_TICKET={}".format(result.order))
+
+
+        ## FOR BUY
+
+    elif trade_signal == 'Buy':
+        print(f"Buy {symbol}")
+        
+
+        symbol_info = mt5.symbol_info(symbol)
+        if symbol_info is None:
+            print(symbol, "not found, can not call order_check()")
+            continue
+
+        if not symbol_info.visible:
+            print(symbol, "is not visible, trying to switch on")
+            if not mt5.symbol_select(symbol, True):
+                print("symbol_select({}) failed, exit".format(symbol))
+                continue
+
+        lot = 0.1
+        point = mt5.symbol_info(symbol).point
+        price = mt5.symbol_info_tick(symbol).ask
+        deviation = 20
+        request = {
+            "action": mt5.TRADE_ACTION_DEAL,
+            "symbol": symbol,
+            "volume": lot,
+            "type": mt5.ORDER_TYPE_BUY,
+            "price": price,
+            "sl": price - 100 * point,
+            "tp": price + 200 * point,
+            "deviation": deviation,
+            "magic": 234000,
+            "comment": "python script open",
+            "type_time": mt5.ORDER_TIME_GTC,
+            "type_filling": mt5.ORDER_FILLING_FOK,
+        }
+
+        
+        result = mt5.order_send(request)
+        
+        print("1. order_send(): by {} {} lots at {} with deviation={} points".format(symbol, lot, price, deviation))
+        if result.retcode != mt5.TRADE_RETCODE_DONE:
+            print("2. order_send failed, retcode={}".format(result.retcode))
+            
+            result_dict = result._asdict()
+            for field in result_dict.keys():
+                print("   {}={}".format(field, result_dict[field]))
+                
+                if field == "request":
+                    traderequest_dict = result_dict[field]._asdict()
+                    for tradereq_filed in traderequest_dict:
+                        print("       traderequest: {}={}".format(tradereq_filed, traderequest_dict[tradereq_filed]))
+            print("shutdown() and quit")
+            mt5.shutdown()
+            quit()
+
+        print("2. order_send done, ", result)
+        print("   opened position with POSITION_TICKET={}".format(result.order))
+
+# Shutdown MetaTrader 5 at the end
+mt5.shutdown()
