@@ -46,7 +46,7 @@ while True:
 
    # 4. SET THE TIMEFRAME TO 5 MINS
 
-   timeframe = mt5.TIMEFRAME_M1
+   timeframe = mt5.TIMEFRAME_M15
 
    # 5. GET HISTORICAL PRICE DATA
 
@@ -61,7 +61,7 @@ while True:
 
    desired_symbols = ['EURUSD', 'EURCAD', 'AUDUSD', 'NZDCAD', 'NZDUSD', 'AUDCAD']
    for symbol in desired_symbols:
-       rates = mt5.copy_rates_from_pos(symbol, mt5.TIMEFRAME_M1, 0, 50)
+       rates = mt5.copy_rates_from_pos(symbol, mt5.TIMEFRAME_M15, 0, 50)
 
 
        #print(f"\nDisplay obtained data for {symbol} 'as is'")
@@ -79,75 +79,6 @@ while True:
 
 
 
-   # 7 - SPECIAL ZONES
-
-   with open('../lib/assets/special_values.pkl', 'rb') as f:
-       special_values = pickle.load(f)
-
-   special_zones = special_values
-
-   def get_current_market_prices(symbols):
-       prices = {}
-
-       if not mt5.initialize():
-           print("Failed to connect to MetaTrader 5 terminal.")
-           return prices
-
-       try:
-           for symbol in symbols:
-               if not mt5.symbol_select(symbol):
-                   print(f"Symbol {symbol} is not valid.")
-                   continue
-
-               tick = mt5.symbol_info_tick(symbol)
-               if not tick:
-                   print(f"Failed to get tick data for symbol {symbol}.")
-                   continue
-
-               prices[symbol] = tick.bid
-
-           return prices
-       finally:
-           mt5.shutdown()
-
-
-
-   def within_special_zone(current_prices, special_zones, df):
-       for symbol, price in current_prices.items():
-           if symbol in special_zones:
-               zones_data = special_zones[symbol]
-
-               within_any_special_zone = False
-
-               for zone_name, zone_value in zones_data.items():
-                   if isinstance(zone_value, (int, float)):
-                       if zone_value - 0.001 <= price <= zone_value + 0.001:
-                           print(f"{symbol} - within special zone {zone_name} ({price}).")
-                           within_any_special_zone = True
-                           break
-                   elif isinstance(zone_value, dict):
-                       for sub_zone_name, sub_zone_values in zone_value.items():
-                           for sub_zone_value in sub_zone_values:
-                               if sub_zone_value - 0.001 <= price <= sub_zone_value + 0.001:
-                                   print(f"{symbol} - within special zone {zone_name}_{sub_zone_name} ({price}).")
-                                   within_any_special_zone = True
-                                   break
-
-               if within_any_special_zone:
-                   df.loc[df['symbol'] == symbol, 'SpecialZone'] = f"Within {zone_name}" if isinstance(zone_value, (int, float)) else f"Within {zone_name}_{sub_zone_name}"
-               else:
-                   df.loc[df['symbol'] == symbol, 'SpecialZone'] = 'Not within any special zone'
-           else:
-               df.loc[df['symbol'] == symbol, 'SpecialZone'] = 'Not within any special zone'
-
-   # Example usage:
-
-   df['SpecialZone'] = ''
-   symbols_to_check = ['EURUSD', 'AUDUSD', 'EURCAD', 'AUDCAD', 'NZDCAD', 'NZDUSD']
-   current_prices = get_current_market_prices(symbols_to_check)
-   within_special_zone(current_prices, special_zones, df)
-
-   # print(df)
    
 
    # 8- TRADING STRATEGY
@@ -158,7 +89,7 @@ while True:
    df['previous_open'] = df['open'].shift(1)
    df['previous_close'] = df['close'].shift(1)
 
-   def trading_strategy(candle, special_zones):
+   def trading_strategy(candle):
        bull_cond1 = candle['close'] > candle['open']  # bull candle condition
        bull_cond2 = candle['close'] > candle['previous_high']  # engulfment condition
        bull_cond3 = candle['previous_open'] > candle['previous_close']  # previous candle must be a bear candle
@@ -173,9 +104,9 @@ while True:
 
        special_cond = abs(candle['open'] - candle['close']) / (candle['previous_high'] - candle['previous_low']) >= 1.5
 
-       if bull_cond1 and bull_cond2 and bull_cond3 and special_cond and candle['SpecialZone'] == 'Within special zone':
+       if bull_cond1 and bull_cond2 and bull_cond3 and special_cond :
            return 'Buy'
-       elif bear_cond1 and bear_cond2 and bear_cond3 and special_cond and candle['SpecialZone'] == 'Within special zone':
+       elif bear_cond1 and bear_cond2 and bear_cond3 and special_cond :
            return 'Sell'
        else:
            return np.nan
@@ -183,7 +114,7 @@ while True:
    # Example usage:
 
    # Apply the trading strategy to each row in the DataFrame
-   df['TradeSignal'] = df.apply(trading_strategy, special_zones=special_zones, axis=1)
+   df['TradeSignal'] = df.apply(trading_strategy, axis=1)
 
    # Filter rows with trade signals
    buy_signals = df[df['TradeSignal'] == 'Buy']
@@ -343,4 +274,4 @@ while True:
    # Shutdown MetaTrader 5 at the end
    mt5.shutdown()
 
-   time.sleep(1 * 60)
+   time.sleep(15 * 60)
